@@ -1,0 +1,51 @@
+### TOFMATCHED_VS_REFMULT PILE-UP REMOVAL PACKAGE
+### DEVELOPED BY FUDAN-BNL GROUP FOR ISOBAR DATA ANALYSIS
+### ANY QUESTIONS ON THIS CODE ARE WELCOME TO ASK Y. HU, P. TRIBEDY, S. CHOUDHURY, APR 1, 2020
+### LAST EDIT ON APR 1, 2020
+
+
+#
+# First get a ROOT FILE (e.g. prith_qahist.root) which has 2D histogram (e.g. TOF_refMult) of TOFMatched vs refMult
+#
+# Then to Run this code do : 
+#
+# bash all_nbdfit prith_qahist.root TOF_refMult 10 500 10
+#
+#
+
+This package is design for removing TOFMatched_vs_RefMult pile-up.
+The code will use a doulbe Negative Binomial Distribution (NBD) to fit the refmult distribution for both peak and tail in each tofmathced slice (controled by STEP). It also has a simply function to search the initial parameters for the fitting. The default parameter is 3*(skewness+1)*sigma for the up limit and 3.5*sigma for the low limit (N can be changed in the advanced mode). After projecting and fitting the whole range, a quartic polynomial function will be used to fit and give the up and low limit.
+
+
+###################################
+This package has the following files:
+     all_nbdfit
+     pileup.C
+     read_tof_ref.C
+     nbdfit.gp
+     3dplot.gp
+     README
+
+###################################
+To run this code, after unzip the package, just simply run:
+   bash all_nbdfit FILENAME [e.g qahist.root] HISTNAME [e.g TOF_refMult] IMIN [e.g 0] IMAX [e.g 480] STEP [e.g 10]
+   e.g bash all_nbdfit prith_qahist.root TOF_refMult 10 500 10
+
+
+###################################
+Output of this package will be:
+1. nbdfit_*_*.eps      #The fitting result for that bin. e.g nbdfit_40_50.eps is the plot for bin 40~50
+2. nbdfit_allrange.eps #The final fitting plot with the TOFMatched-refMult 2D map
+3. nbdfit_allrange.gnu #The drawing scripts for the final plot
+
+
+###################################
+Advanced function:
+To change how many times of (skewness+1)*sigma for up limit and how many times of sigma for low limit,
+you can use the the advanced function by adding 2 more number to set up:
+   bash all_nbdfit FILENAME [e.g qahist.root] HISTNAME [e.g TOF_refMult] IMIN [e.g 0] IMAX [e.g 480] STEP [e.g 10] UP_LIMIT [e.g 3] LOW_LIMIT [e.g 3.5]
+   e.g bash all_nbdfit prith_qahist.root TOF_refMult 10 500 10 3 3.5
+
+
+###################################
+For different data set, you may need to change the initail parameter generation fucntion a little bit to improve the fitting efficiency. The funciton is inside the nbdfit.gp.
