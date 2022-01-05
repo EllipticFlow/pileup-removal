@@ -1,0 +1,178 @@
+#!/bin/bash
+
+if [ -z "$1" ]
+then
+    printf "\e[31m ERROR: (Argument 1) No ROOT FILE supplied, will exit \n"
+    printf "\e[39m "
+    printf "\e[34m Try: bash all_nbdfit FILENAME [e.g qahist.root] HISTNAME [e.g TOF_refMult] IMIN [e.g 0] IMAX [e.g 480] STEP [e.g 10]\n"
+    printf "\e[39m "
+    exit
+else
+    filename=$1
+fi         
+
+
+if [ -z "$2" ]
+then
+    printf "\e[31m ERROR: (Argument 2) No HISTNAME supplied, will exit \n"
+    printf "\e[39m "
+    printf "\e[34m Try: bash all_nbdfit FILENAME [e.g qahist.root] HISTNAME [e.g TOF_refMult] IMIN [e.g 0] IMAX [e.g 480] STEP [e.g 10]\n"
+    printf "\e[39m "
+    exit
+else
+    histname=$2
+fi
+
+
+if [ -z "$3" ]
+then
+    printf "\e[31m ERROR: (Argument 3) No IMIN (low limit) supplied, will exit \n"
+    printf "\e[39m "
+    printf "\e[34m Try: bash all_nbdfit FILENAME [e.g qahist.root] HISTNAME [e.g TOF_refMult] IMIN [e.g 0] IMAX [e.g 480] STEP [e.g 10]\n"
+    printf "\e[39m "
+    exit
+else
+    imin=$3    
+fi         
+
+
+if [ -z "$4" ]
+then
+    printf "\e[31m ERROR: (Argument 4) No IMAX (high limit) supplied, will exit \n"
+    printf "\e[39m "
+    printf "\e[34m Try: bash all_nbdfit FILENAME [e.g qahist.root] HISTNAME [e.g TOF_refMult] IMIN [e.g 0] IMAX [e.g 480] STEP [e.g 10]\n"
+    printf "\e[39m "
+    exit
+else
+    imax=$4    
+fi
+
+
+if [ -z "$5" ]
+then
+    printf "\e[31m ERROR: (Argument 5) No STEP supplied, will exit \n"
+    printf "\e[39m "
+    printf "\e[34m Try: bash all_nbdfit FILENAME [e.g qahist.root] HISTNAME [e.g TOF_refMult] IMIN [e.g 0] IMAX [e.g 480] STEP [e.g 10]\n"
+    printf "\e[39m "
+    exit
+else
+    step=$5
+fi         
+
+echo "-----------------------------------------------------------"
+echo "------TOFMATCHED_VS_REFMULT PILE-UP REMOVAL PACKAGE--------"
+echo "--------------- version beta 1.1 (LOCAL)-------------------"
+echo "-------------------P. Tribedy, Y. Hu ----------------------"
+echo "---------------Last update on Apr 1, 2020------------------"
+echo "-----------------------------------------------------------"
+
+if [ -z "$6" ]; then
+    printf "\e[35m No +N*(skewness+1)*sgima supplied, will use 3 as default \n"
+    printf "\e[39m "
+    right=3
+else
+    right=$6
+fi         
+
+if [ -z "$7" ]
+then
+    printf "\e[35m No -N*sgima supplied, will use 3.5 as default \n"
+    printf "\e[39m "
+    left=3.5
+else
+    left=$7
+fi         
+
+###First we need to generate the data file from the given 2d root hist
+
+g++ -std=c++11 -Wall -Os -w -pipe  -I. $(root-config --cflags) -c read_tof_ref.C
+g++ -std=c++11 -Wall -Os -w -pipe  -I. $(root-config --cflags) read_tof_ref.o $(root-config --glibs) -o read_tof_ref
+
+if [ -f temp_log ];  then
+    rm temp_log
+fi
+
+$PWD/read_tof_ref -h ${histname} -f ${filename} >Tof_refmult.txt
+
+rm read_tof_ref.o read_tof_ref TOF_refMult.C 
+### Done, ready to do the projection and fitting
+
+####
+imid=$imin
+initial=$imin
+pp=0
+#Here pp is a fitting counter, design to monitor how many times we use auto search to find the parameters 
+
+bash fitcleanup 
+#touch myscript
+#echo "# This is auto generated" >myscript
+echo "Will help you check the range from $imin to $imax"
+
+until [ $imin -ge $imax ]
+do
+    if [ $pp -eq 0 ]
+       then
+	   imid=$(($imin+$step))
+    fi
+
+    echo " "
+    echo "Checking bin from $imin to $imid"
+    
+    root -l "pileup.C("'"'"${histname}"'"'","'"'"${filename}"'"'",$imin,$imid)" >mbin_${imin}_${imid} -q 
+# Somehow this doesn't work on my laptop, so I still use the old command    
+#    root -b "pileup.C("'"'"${histname}"'"'","'"'"${filename}"'"'",$imin,$imid)" -q | awk '$1**2>1{print $0}' > mbin_${imin}_${imid}
+
+
+    bash nbdfit.gp $imin $imid $pp $right $left
+
+    if [ $imin -ne $imid ]
+    then
+	partest=$(awk 'NR==1  {print int($3)}' "parameters_${imin}_${imid}.dat")
+	if [ $imin -gt $initial ]
+	then
+	    #Check the fitting result and do the auto-search initial parameters
+	    if [ $partest -gt 0 ]
+	    then
+		pp=$(($pp*0))
+	    else
+		echo "Fitting failed. But don't worry my master, I will auto search the initial parameters"
+		pp=$(($pp+1))
+	    fi
+	fi
+    fi
+    if [ $pp -eq 0 ]
+       then
+       imin=$(($imin+$step))
+    fi
+    #If check too many times, stop the initial parameters auto-search
+    if [ $pp -gt 5 ]
+    then
+       pp=$(($pp*0))
+       imin=$(($imin+$step))
+       echo "Sorry, my master. I do too many times auto search but all failed, maybe you should try by hand"
+    fi
+
+done
+
+#cat parameters_*_*.dat | sort -n -k1,1 >parameters_allrange
+
+cat parameters_*_*.dat | sort -n -k1,1 | awk '{if($3>0){print($0)}}'>parameters_allrange
+
+#To plot the fitting result, the easiest way is to generate a x-axis number file
+if [ -f "Xaxis" ]; then
+    rm Xaxis
+fi
+
+seq ${initial} ${imax} > Xaxis
+
+
+bash 3dplot.gp $right $left
+
+### clean some cash files
+rm mbin_*_*
+rm parameters_*_*.dat
+rm temp_data temp_data2 temp_data3
+rm *.log
+
+# convert -density 500 "nbdfit_allrange.eps" -quality 100 "nbdfit_allrange.jpg" 
+#break
